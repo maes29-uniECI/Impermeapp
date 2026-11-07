@@ -1,0 +1,64 @@
+rules_version = '2';
+// Reglas de seguridad de ImpermeApp.
+// Se pegan en Firebase: Firestore Database > Reglas > Publicar.
+// Cada cliente solo ve y cambia lo suyo; el equipo (celulares de isAdmin) ve y administra todo.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    // Celulares del equipo. Debe coincidir con ADMIN_PHONES en index.html.
+    function isAdmin() { return signedIn() && request.auth.token.phone_number in ['+573105550000']; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function ownsService(id) { return signedIn() && get(/databases/$(database)/documents/services/$(id)).data.clientKey == request.auth.uid; }
+
+    // Precios, agenda y técnicos: los lee cualquiera; solo el equipo los cambia.
+    match /config/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+      // Contador de número de servicio: cualquier usuario con sesión toma el siguiente número.
+      allow create: if doc == 'counter' && signedIn() && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n is int;
+      allow update: if doc == 'counter' && signedIn() && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n > resource.data.n;
+    }
+
+    // Cuenta de cada cliente (el id del documento es su usuario de Firebase).
+    match /clients/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if isAdmin() || (isOwner(uid) && request.resource.data.nombre is string);
+      allow delete: if isAdmin();
+    }
+
+    // Solicitudes de servicio.
+    match /services/{id} {
+      allow read: if isAdmin() || (signedIn() && resource.data.clientKey == request.auth.uid);
+      allow create: if isAdmin() || (signedIn() && request.resource.data.clientKey == request.auth.uid && request.resource.data.estado in [1, 2]);
+      // El cliente solo puede aprobar la cotización o pedir un ajuste.
+      allow update: if isAdmin() || (signedIn() && resource.data.clientKey == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aprobada', 'ajuste', 'estado', 'aprobadaAt', 'updated'])
+        && request.resource.data.estado in [resource.data.estado, 3]);
+      allow delete: if isAdmin();
+    }
+
+    // Fotos de cada solicitud.
+    match /photos/{id} {
+      allow read, create: if isAdmin() || ownsService(id);
+      allow update, delete: if isAdmin();
+    }
+
+    // Ocupación de la agenda: solo fecha y franja, sin datos personales.
+    match /ocupacion/{id} {
+      allow read: if signedIn();
+      allow create: if isAdmin() || (signedIn() && request.resource.data.clientKey == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    // Chat de cada cliente con el equipo.
+    match /chats/{uid} {
+      allow read, write: if isOwner(uid) || isAdmin();
+      match /messages/{msgId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create: if isAdmin() || (isOwner(uid) && request.resource.data.who in ['u', 'b']);
+        allow update, delete: if isAdmin();
+      }
+    }
+  }
+}
