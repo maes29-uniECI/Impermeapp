@@ -1497,9 +1497,8 @@ function emptyAdmin() {
 }
 function rowSvc(s) {
   const al = alertsOf(s); const un = unreadAdmin(s.clientKey); const u = (ORIENT[s.tipo] || ORIENT.Otro).u;
-  return `<button class="arow" data-a="open" data-arg="${s._id}"><span class="num">#${s.num}</span><span class="grow"><b>${esc(cliOf(s).nombre)} · ${esc(s.tipo)}</b><span class="small">${esc(s.direccion)} · ${esc(techName(s.tecnico) || 'Sin técnico')}</span>
-    <span class="flags">${u === 3 ? '<span class="pill u3">Urgente</span>' : ''}${al.map(x => `<span class="pill u2">${x}</span>`).join('')}${un ? '<span class="pill u3">Mensaje nuevo</span>' : ''}</span></span>
-    <span class="end">${badgeOf(s)}<span class="small">${esc(visitTxt(s))}</span></span></button>`;
+  return `<button class="arow" data-a="open" data-arg="${s._id}"><span class="num">#${s.num}</span><span class="grow"><b>${esc(cliOf(s).nombre)} · ${esc(s.tipo)}</b><span class="small">${esc(s.direccion)} · ${esc(techName(s.tecnico) || 'Sin técnico')}</span><span class="small">${esc(visitTxt(s))}</span></span>
+    <span class="end">${badgeOf(s)}${u === 3 ? '<span class="pill u3">Urgente</span>' : ''}${al.map(x => `<span class="pill u2">${x}</span>`).join('')}${un ? '<span class="pill u3">Mensaje nuevo</span>' : ''}</span></button>`;
 }
 function visitWarn(s) {
   const v = A.vd; if (!v || !v.fecha) return 'Sin fecha agendada.';
