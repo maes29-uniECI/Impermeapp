@@ -473,9 +473,8 @@ function suggested(s) {
   const st = D.settings, area = Math.max(1, +s.area || 20), rate = +st.precios[s.tipo] || 40000;
   return { items: [
     { desc: 'Materiales de impermeabilización', cant: area, unidad: 'm²', valor: r100(rate * .55) },
-    { desc: 'Mano de obra', cant: area, unidad: 'm²', valor: r100(rate * .45) },
-    { desc: 'Visita técnica y diagnóstico', cant: 1, unidad: 'und', valor: +st.visita || 0 }
-  ], ivaPct: +st.iva || 0, dias: Math.max(1, Math.ceil(area / 25)), nota: `Incluye garantía de ${st.garantia} años sobre la impermeabilización.` };
+    { desc: 'Mano de obra', cant: area, unidad: 'm²', valor: r100(rate * .45) }
+  ].concat(s.modo === 'linea' ? [] : [{ desc: 'Visita técnica y diagnóstico', cant: 1, unidad: 'und', valor: +st.visita || 0 }]), ivaPct: +st.iva || 0, dias: Math.max(1, Math.ceil(area / 25)), nota: `Incluye garantía de ${st.garantia} años sobre la impermeabilización.` };
 }
 const unreadAdmin = key => { const c = D.chats[key]; return !!c && (c.lastClientAt || 0) > (c.adminSeenAt || 0); };
 const unreadClient = key => { const c = D.chats[key]; return !!c && (c.lastTeamAt || 0) > (c.clientSeenAt || 0); };
@@ -754,10 +753,13 @@ function hdr(title, opts = {}) {
     ${DROP(16, 21)}<h1>${title}${opts.sub ? `<span class="sub">${opts.sub}</span>` : ''}</h1>
     <button class="ib" data-go="inicio" aria-label="Inicio">${ICON.home}</button></header>`;
 }
-const steps = n => `<div class="kicker">Paso ${n} de 3</div><div class="steps">${[1, 2, 3].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>`;
+// The same three step names appear on the home screen and on top of each step.
+const STEP_NAMES = ['Cuéntanos el problema', 'Elige cómo cotizar', 'Agenda la visita'];
+const steps = n => `<div class="kicker">Paso ${n} de 3 · ${STEP_NAMES[n - 1]}</div><div class="steps">${[1, 2, 3].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>`;
 function showErr(id, field, msg) { if (field) { $('#' + field).classList.add('bad'); $('#' + field).focus(); } $('#' + id).textContent = msg; $('#' + id).hidden = false; }
 const waLink = (cel, text) => `https://wa.me/${digits(cel).length === 10 ? '57' + digits(cel) : digits(cel)}?text=${encodeURIComponent(text)}`;
-function startReport() { go(me() ? 'reporte' : 'registro'); }
+// Visitors land on sign-in, which offers the demo account and a link to create an account.
+function startReport() { go(me() ? 'reporte' : AUTH ? 'registro' : 'login'); }
 // A different account on this device starts with an empty request draft.
 function switchAccount(k) { if (L.clientKey !== k) L.draft = freshDraft(); L.clientKey = k; L.cur = null; }
 function busy(btn, on, txt) { if (!btn) return; if (on) { btn.dataset.t = btn.textContent; btn.textContent = txt || 'Guardando…'; btn.disabled = true; } else { btn.textContent = btn.dataset.t || btn.textContent; btn.disabled = false; } }
@@ -769,11 +771,11 @@ const SCREENS = {
       <button class="ib" id="acct" aria-label="Mi cuenta">${ICON.user}</button></header>
     <div class="body">
       <div class="hero"><div class="dropfall">${DROP(64, 84)}</div><h2>${u ? 'Hola, ' + esc(first(u.nombre)) : 'ImpermeApp'}</h2><p>Reporta humedades y filtraciones, cotiza y sigue tu servicio en vivo.</p></div>
-      ${s ? `<button class="active" data-svc="${s._id}"><span class="grow"><span class="small">Servicio #${s.num} · ${esc(STATES[s.estado])}</span><b>${esc(s.tipo)}</b><span class="small">${esc(visitTxt(s))}</span></span>${ICON.chev}</button>`
-        : `<ol class="howto"><li><b>1</b>Sube fotos y recibe orientación</li><li><b>2</b>Agenda la visita técnica</li><li><b>3</b>Recibe y aprueba tu cotización</li></ol>`}
+      ${s ? `<button class="active" data-svc="${s._id}"><span class="grow"><span class="small">Solicitud #${s.num} · ${esc(STATES[s.estado])}</span><b>${esc(s.tipo)}</b><span class="small">${esc(visitTxt(s))}</span></span>${ICON.chev}</button>`
+        : `<ol class="howto">${STEP_NAMES.map((n, i) => `<li><b>${i + 1}</b>${n}</li>`).join('')}</ol><p class="small" style="margin:14px 0 0;text-align:center">Después recibes la cotización aquí mismo para aprobarla.</p>`}
       ${unread ? `<button class="msgnote" data-go="chat"><i></i><span>Tienes un mensaje nuevo del equipo</span></button>` : ''}
     </div>
-    <div class="foot"><button class="btn" id="goReport">Reportar un problema</button><button class="btn sec" data-go="servicios">Ver mis servicios</button>
+    <div class="foot"><button class="btn" id="goReport">Reportar un problema</button>${u ? '<button class="btn sec" data-go="servicios">Ver mis solicitudes</button>' : ''}
       <div class="linkrow">${u ? '' : '<button class="link" data-go="login">¿Ya tienes cuenta? Inicia sesión</button>'}<button class="link" id="toAdmin" style="color:var(--muted)">Acceso del equipo</button></div></div>`; },
     init() {
       $('#goReport').onclick = startReport;
@@ -833,13 +835,14 @@ const SCREENS = {
       </div>
       <span class="lbl">Tus datos</span>
       <label class="fl" for="fNombre" style="margin-top:0">Nombre completo</label><input class="inp" id="fNombre" autocomplete="name" placeholder="Laura Gómez" value="${esc(r.nombre)}">
-      <label class="fl" for="fCel">Celular (WhatsApp)</label><input class="inp" id="fCel" inputmode="tel" autocomplete="tel" placeholder="300 000 0000" value="${esc(r.celular)}" ${lockCel ? 'readonly' : ''}>
+      <label class="fl" for="fCel">Celular</label><input class="inp" id="fCel" inputmode="tel" autocomplete="tel" placeholder="300 000 0000" value="${esc(r.celular)}" ${lockCel ? 'readonly' : ''}>
       ${lockCel ? '<p class="small" style="margin:6px 0 0">Tu celular ya está confirmado e identifica tu cuenta.</p>' : ''}
       <div id="rCodeWrap" hidden><label class="fl" for="rCode">Código de 6 dígitos que te llegó por SMS</label><input class="inp" id="rCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456"></div>
       <label class="fl" for="fMail">Correo electrónico (opcional)</label><input class="inp" id="fMail" type="email" autocomplete="email" placeholder="laura@correo.com" value="${esc(r.correo)}">
       <div id="edifWrap" ${r.tipo === 'administrador' ? '' : 'hidden'}><label class="fl" for="fEdif">Edificio o conjunto</label><input class="inp" id="fEdif" placeholder="Conjunto Los Pinos" value="${esc(r.edificio)}"></div>
       <div class="err" id="regErr" hidden></div>
-      <p class="small" style="margin-top:12px">Usaremos tu celular para confirmar tus citas por WhatsApp.</p>
+      <p class="small" style="margin-top:12px">Con tu celular inicias sesión. Te avisamos de cada cambio en el chat de la app.</p>
+      ${AUTH ? '' : '<button class="link" data-go="login" style="padding-left:0">¿Ya tienes cuenta o quieres usar la de ejemplo? Inicia sesión</button>'}
     </div>
     <div class="foot"><button class="btn" id="regOk">${u ? 'Guardar cambios' : 'Crear cuenta y continuar'}</button></div>`; },
     init() {
@@ -913,7 +916,7 @@ const SCREENS = {
   orientacion: { name: 'Orientación inicial', auth: true, html: () => { const tipo = L.draft.report.tipo || 'Filtración en techo'; const o = ORIENT[tipo];
     return `${hdr('Orientación inicial')}
     <div class="body">
-      <div class="small" style="font-size:13.5px;margin-bottom:12px">Según tus fotos y el tipo de problema</div>
+      ${steps(1)}<div class="small" style="font-size:13.5px;margin:6px 0 12px">Según el tipo de problema que elegiste</div>
       <div class="ocard">
         <div class="pills"><span class="pill b">${esc(tipo)}</span><span class="pill u${o.u}">${o.ut}</span></div>
         <h3>Posible causa</h3><p>${o.c}</p>
@@ -933,8 +936,8 @@ const SCREENS = {
       <label class="fl" for="fArea">Área afectada aproximada (m²)</label><input class="inp" id="fArea" inputmode="numeric" placeholder="20" value="${esc(q.area)}">
       <span class="lbl">¿Cómo quieres tu cotización?</span>
       <div role="radiogroup" aria-label="Tipo de cotización">
-        <button class="opt sq" role="radio" data-m="visita" aria-checked="${q.modo === 'visita'}"><span class="mk"></span><span><b>Visita técnica presencial</b><span class="s">Un técnico revisa el sitio y mide</span></span></button>
-        <button class="opt sq" role="radio" data-m="linea" aria-checked="${q.modo === 'linea'}"><span class="mk"></span><span><b>Cotización en línea</b><span class="s">Estimado inmediato con tus fotos y el área</span></span></button>
+        <button class="opt sq" role="radio" data-m="visita" aria-checked="${q.modo === 'visita'}"><span class="mk"></span><span><b>Visita técnica presencial</b><span class="s">Un técnico revisa y mide. La visita cuesta ${money(D.settings.visita)} y va incluida en la cotización.</span></span></button>
+        <button class="opt sq" role="radio" data-m="linea" aria-checked="${q.modo === 'linea'}"><span class="mk"></span><span><b>Cotización en línea</b><span class="s">Precio estimado al instante según el área. Sin costo de visita.</span></span></button>
       </div>
       <div id="estimate"></div>
       <div class="err" id="cotErr" hidden></div>
@@ -945,8 +948,8 @@ const SCREENS = {
       const renderEst = () => {
         const box = $('#estimate');
         if (q.modo !== 'linea') { box.innerHTML = ''; return; }
-        const c = suggested({ area: q.area, tipo: L.draft.report.tipo }); const t = qTotals(c);
-        box.innerHTML = `<div class="qt"><div class="r"><span>Estimado para ${esc(+q.area >= 1 ? q.area : 20)} m²</span><span></span></div><div class="r tot"><span>Total aproximado</span><span>${money(t.total)}</span></div><div class="small" style="margin-top:6px">El equipo revisa el valor final y te lo confirma en la app.</div></div>`;
+        const c = suggested({ area: q.area, tipo: L.draft.report.tipo, modo: 'linea' }); const t = qTotals(c);
+        box.innerHTML = `<div class="qt"><div class="r tot" style="border:0;margin:0;padding-top:0"><span>Total aproximado para ${esc(+q.area >= 1 ? q.area : 20)} m²</span><span>${money(t.total)}</span></div><div class="small" style="margin-top:6px">El equipo revisa el valor final y te lo confirma en la app.</div></div>`;
       };
       $$('#screens [data-m]').forEach(b => b.onclick = () => { q.modo = b.dataset.m; $$('#screens [data-m]').forEach(x => x.setAttribute('aria-checked', x === b)); renderEst(); saveL(); });
       $('#fDir').oninput = e => { q.direccion = e.target.value; e.target.classList.remove('bad'); $('#cotErr').hidden = true; saveL(); };
@@ -961,8 +964,9 @@ const SCREENS = {
     } },
 
   agenda: { name: 'Agendar visita', auth: true, html: () => { const a = L.draft.agenda, linea = L.draft.quote.modo === 'linea';
-    return `${hdr(linea ? 'Agendar servicio' : 'Agendar visita')}
+    return `${hdr('Agendar visita')}
     <div class="body">${steps(3)}
+      ${linea ? '<p class="small" style="margin:6px 0 0">Ese día el técnico confirma medidas. La obra solo empieza cuando apruebes la cotización.</p>' : ''}
       <div class="calh"><span class="lbl" style="margin:0">Elige tu fecha</span>
         <span class="calnav"><button class="ib" id="calPrev" aria-label="Mes anterior">${ICON.prev}</button><b id="calMonth"></b><button class="ib" id="calNext" aria-label="Mes siguiente">${ICON.chev}</button></span></div>
       <div class="cal" id="cal"></div>
@@ -973,9 +977,9 @@ const SCREENS = {
         <button class="opt" role="radio" data-f="tarde" aria-checked="${a.franja === 'tarde'}"><span class="mk"></span><span class="slot"><b>Tarde</b><em>1:00 PM – 5:00 PM</em></span></button>
       </div>
       <div class="err" id="agErr" hidden></div>
-      <p class="small" style="text-align:center;margin-top:10px">Te confirmaremos la cita por WhatsApp.</p>
+      <p class="small" style="text-align:center;margin-top:10px">Te confirmamos la visita en el chat de la app.</p>
     </div>
-    <div class="foot"><button class="btn" id="agOk">${linea ? 'Agendar servicio' : 'Agendar visita técnica'}</button></div>`; },
+    <div class="foot"><button class="btn" id="agOk">Agendar visita</button></div>`; },
     init() {
       const a = L.draft.agenda;
       if (a.fecha && !isAvail(fromIso(a.fecha))) a.fecha = null;
@@ -987,12 +991,12 @@ const SCREENS = {
       $('#agOk').onclick = submitRequest;
     } },
 
-  servicios: { name: 'Mis servicios', auth: true, live: true, html: () => { const mine = myServices().slice().reverse();
-    return `${hdr('Mis servicios')}
+  servicios: { name: 'Mis solicitudes', auth: true, live: true, html: () => { const mine = myServices().slice().reverse();
+    return `${hdr('Mis solicitudes')}
     <div class="body">${mine.length ? `<div class="slist">${mine.map(s => `<button class="scard" data-svc="${s._id}">
-        <span class="top"><span class="small">Servicio #${s.num}</span>${badgeOf(s)}</span>
+        <span class="top"><span class="small">Solicitud #${s.num}</span>${badgeOf(s)}</span>
         <b>${esc(s.tipo)} · ${esc(s.inmueble)}</b><span class="small">${esc(STATES[s.estado])} · ${esc(visitTxt(s))}</span></button>`).join('')}</div>`
-      : `<div class="empty">${DROP(44, 57)}<p>Aún no tienes servicios. Reporta tu primer problema y aquí verás su avance.</p></div>`}
+      : `<div class="empty">${DROP(44, 57)}<p>Aún no tienes solicitudes. Reporta tu primer problema y aquí verás su avance.</p></div>`}
     </div>
     <div class="foot"><button class="btn" id="newReq">Nueva solicitud</button></div>`; },
     init() {
@@ -1000,27 +1004,27 @@ const SCREENS = {
       $('#newReq').onclick = startReport;
     } },
 
-  servicio: { name: 'Mi servicio', auth: true, svc: true, live: true, html: () => { const s = curSvc(); const c = s.cotizacion; const t = qTotals(c); const tech = techOf(s.tecnico);
-    const sub = [fmtTs(s.creado), visitTxt(s) + (s.modo === 'linea' ? ' · servicio' : ''),
+  servicio: { name: 'Mi solicitud', auth: true, svc: true, live: true, html: () => { const s = curSvc(); const c = s.cotizacion; const t = qTotals(c); const tech = techOf(s.tecnico);
+    const sub = [fmtTs(s.creado), visitTxt(s),
       c ? `${money(t.total)} · ${s.aprobada ? 'aprobada' : s.ajuste ? 'ajuste pedido' : 'revisa y aprueba'}` : 'En preparación',
       `Duración estimada: ${(c && c.dias) || '–'} día${c && c.dias > 1 ? 's' : ''}`, `Obra entregada · garantía de ${D.settings.garantia} años`];
-    return `${hdr('Mi servicio #' + s.num, { sub: esc(s.tipo) })}
+    return `${hdr('Solicitud #' + s.num, { sub: esc(s.tipo) })}
     <div class="body">
       <div class="stat"><span class="small" style="font-size:13px">Seguimiento en vivo</span>${badgeOf(s)}</div>
       <ol class="tl">${STATES.map((st, i) => `<li class="${i < s.estado ? 'done' : i === s.estado ? 'now' : ''}"><span class="k"><span>${i + 1}</span></span><span><b>${st}</b>${i <= s.estado ? `<small>${esc(sub[i])}</small>` : ''}</span></li>`).join('')}</ol>
       <div class="tech"><div class="who"><span class="avatar">${tech ? esc(initials(tech.nombre)) : DROP(16, 21)}</span><span><span class="small">Técnico asignado</span><br><b>${tech ? esc(tech.nombre) : 'Lo asignamos pronto'}</b></span></div>
-        <button class="btn sec sm" data-go="detalles" style="width:100%">${s.estado === 2 && c && !s.aprobada ? 'Revisar y aprobar cotización' : 'Ver detalles de la obra'}</button></div>
+        <button class="btn sec sm" data-go="detalles" style="width:100%">${s.estado === 2 && c && !s.aprobada ? 'Revisar y aprobar cotización' : 'Ver detalles'}</button></div>
     </div>
     <div class="foot"><button class="btn" data-go="chat">Hablar con el equipo</button></div>`; } },
 
-  detalles: { name: 'Detalles de la obra', auth: true, svc: true, live: true, html: () => { const s = curSvc(); const c = s.cotizacion; const t = qTotals(c); const canApprove = s.estado === 2 && c && !s.aprobada;
-    return `${hdr('Detalles de la obra', { sub: 'Servicio #' + s.num })}
+  detalles: { name: 'Detalles de la solicitud', auth: true, svc: true, live: true, html: () => { const s = curSvc(); const c = s.cotizacion; const t = qTotals(c); const canApprove = s.estado === 2 && c && !s.aprobada;
+    return `${hdr('Detalles', { sub: 'Solicitud #' + s.num })}
     <div class="body">
       <div class="rows">
         <div><small>Inmueble</small><b>${esc(s.inmueble)}${s.area ? ' · ' + esc(s.area) + ' m²' : ''}</b></div>
         <div><small>Dirección</small><b>${esc(s.direccion)}</b></div>
         <div><small>Problema</small><b>${esc(s.tipo)}</b>${s.desc ? `<span class="small" style="display:block;margin-top:4px">${esc(s.desc)}</span>` : ''}</div>
-        <div><small>${s.modo === 'linea' ? 'Servicio agendado' : 'Visita técnica'}</small><b>${esc(visitTxt(s))}</b></div>
+        <div><small>Visita técnica</small><b>${esc(visitTxt(s))}</b></div>
         <div><small>Duración estimada</small><b>${c ? esc(c.dias) + (c.dias > 1 ? ' días' : ' día') : 'Por definir en la visita'}</b></div>
       </div>
       <span class="lbl">Cotización</span>
@@ -1029,12 +1033,12 @@ const SCREENS = {
         <div class="r"><span>IVA ${esc(c.ivaPct)} %</span><span>${money(t.iva)}</span></div>
         <div class="r tot"><span>Total</span><span>${money(t.total)}</span></div>
         <div class="small" style="margin-top:6px">${c.nota ? esc(c.nota) + ' ' : ''}${s.aprobada ? 'Aprobada por ti.' : s.ajuste ? 'Pediste un ajuste; el equipo te enviará una nueva versión.' : ''}${c.auto ? ' Estimado automático en línea.' : ''}</div></div>`
-      : `<p class="small" style="margin:0">${s.estado >= 2 ? 'El equipo está preparando tu cotización.' : 'La cotización llega aquí después de la visita técnica.'}</p>`}
+      : `<p class="small" style="margin:0">${s.estado >= 2 ? 'El equipo está preparando tu cotización. Te avisamos cuando llegue.' : 'La cotización llega aquí después de la visita técnica. Te avisamos cuando llegue.'}</p>`}
       <span class="lbl">Fotos</span>
       <div class="thumbs" id="photos" style="margin-top:0">${[0, 1, 2].map(() => `<div class="th">${ICON.img}</div>`).join('')}</div>
     </div>
-    <div class="foot">${canApprove ? `<button class="btn" id="approve">Aprobar cotización</button><button class="btn sec" id="adjust" ${s.ajuste ? 'disabled' : ''}>${s.ajuste ? 'Ajuste pedido' : 'Pedir un ajuste'}</button>`
-      : `<button class="btn" disabled>${s.aprobada || s.estado > 2 ? 'Cotización aprobada' : 'Cotización pendiente'}</button><button class="btn sec" data-go="chat">Hablar con el equipo</button>`}</div>`; },
+    <div class="foot">${canApprove ? `<button class="btn" id="approve">Aprobar cotización</button>${s.ajuste ? '' : '<button class="btn sec" id="adjust">Pedir un ajuste</button>'}`
+      : '<button class="btn sec" data-go="chat">Hablar con el equipo</button>'}</div>`; },
     init() {
       const s = curSvc();
       loadPhotos(s._id).then(list => { const box = $('#photos'); if (!box || cur !== 'detalles') return; box.innerHTML = [0, 1, 2].map(i => list[i] ? `<button class="th" data-zoom="${i}" aria-label="Ampliar foto ${i + 1}"><img src="${esc(list[i])}" alt="Foto ${i + 1} del daño"></button>` : `<div class="th">${ICON.img}</div>`).join(''); $$('[data-zoom]', box).forEach(b => b.onclick = () => lightbox(list[+b.dataset.zoom])); });
@@ -1042,18 +1046,18 @@ const SCREENS = {
         busy(ap, true, 'Aprobando…');
         const ok = await svcUpdate(s._id, { aprobada: true, ajuste: false, estado: 3, aprobadaAt: Date.now() });
         busy(ap, false); if (!ok) return;
-        sendMsg(s.clientKey, 'u', `Aprobé la cotización del servicio #${s.num}.`, s.num);
+        sendMsg(s.clientKey, 'u', `Aprobé la cotización de la solicitud #${s.num}.`, s.num);
         banner('Cotización aprobada. La obra pasa a ejecución.'); if (hist[hist.length - 1] === 'servicio') back(); else go('servicio', -1, false);
       };
-      const adj = $('#adjust'); if (adj) adj.onclick = async () => {
-        const ok = await svcUpdate(s._id, { ajuste: true }); if (!ok) return;
-        chatPrefill = `Quisiera ajustar la cotización del servicio #${s.num} porque `; go('chat');
+      // the request is marked "ajuste pedido" only when the client actually sends the reason
+      const adj = $('#adjust'); if (adj) adj.onclick = () => {
+        chatPrefill = `Quisiera ajustar la cotización de la solicitud #${s.num} porque `; pendingAjuste = s._id; go('chat');
       };
     } },
 
   chat: { name: 'Chat con el equipo', auth: true, html: () => { const s = curSvc(); const tech = s && techOf(s.tecnico);
-    return `${hdr('Equipo ImpermeApp', { sub: tech ? 'Técnico: ' + esc(tech.nombre) : 'Asesoría por WhatsApp Business' })}
-    <div class="body" id="chatBody" style="padding-top:4px"><a class="wachip" href="${waLink('', `Hola, soy ${(me() || {}).nombre || 'cliente de ImpermeApp'}.${s ? ` Escribo por el servicio #${s.num}.` : ''}`)}" target="_blank" rel="noopener">Continuar en WhatsApp ↗</a><div class="msgs" id="msgs"></div></div>
+    return `${hdr('Equipo ImpermeApp', { sub: tech ? 'Técnico: ' + esc(tech.nombre) : 'Te respondemos aquí mismo' })}
+    <div class="body" id="chatBody" style="padding-top:4px"><div class="msgs" id="msgs"></div></div>
     <div class="quick" id="quick">${['¿Cuánto cuesta?', '¿Es necesario romper el techo?', '¿Cuándo vienen?', '¿Tiene garantía?', '¡Gracias!'].map(q => `<button type="button">${q}</button>`).join('')}</div>
     <form class="compose" id="compose"><label for="msgIn" class="small" style="position:absolute;left:-9999px">Mensaje</label><input class="inp" id="msgIn" placeholder="Escribe un mensaje" autocomplete="off" enterkeyhint="send" maxlength="1000"><button class="send" aria-label="Enviar">${ICON.send}</button></form>`; },
     init() {
@@ -1069,15 +1073,15 @@ const SCREENS = {
       <div class="tech" style="margin-top:0"><div class="who" style="margin:0"><span class="avatar">${esc(initials(u.nombre))}</span>
         <span><b>${esc(u.nombre)}</b><br><span class="small">${u.tipo === 'administrador' ? 'Administrador · ' + esc(u.edificio) : 'Propietario de vivienda'}</span></span></div></div>
       <div class="rows" style="margin-top:8px">
-        <div><small>Celular (WhatsApp)</small><b>${esc(u.celular)}</b></div>
+        <div><small>Celular</small><b>${esc(u.celular)}</b></div>
         <div><small>Correo</small><b>${esc(u.correo || 'Sin correo')}</b></div>
-        <div><small>Servicios</small><b>${myServices().length}</b></div>
+        <div><small>Solicitudes</small><b>${myServices().length}</b></div>
       </div>
     </div>
     <div class="foot"><button class="btn sec" data-go="registro">Editar mis datos</button><button class="btn danger" id="logout">Cerrar sesión</button></div>`; },
     init() { $('#logout').onclick = async () => { await signOutAll(); L.cur = null; L.draft = freshDraft(); watchThread(null); hist.length = 0; banner('Sesión cerrada'); go('inicio', -1, false); }; } }
 };
-let chatPrefill = '';
+let chatPrefill = '', pendingAjuste = null;
 let clientOtp = null; // { cel } while the login screen waits for the SMS code
 
 /* calendar */
@@ -1145,7 +1149,7 @@ function renderMsgs() {
 function reply(t) {
   t = t.toLowerCase(); const s = curSvc(); const c = s && s.cotizacion;
   if (/ajust/.test(t)) return 'Recibimos tu solicitud de ajuste. El equipo revisa la cotización y te envía una versión nueva.';
-  if (/cu[aá]nto|precio|cost|valor|cotiz/.test(t)) return c ? `Tu cotización está en ${money(qTotals(c).total)} con IVA. ${s.aprobada ? 'Ya la aprobaste, gracias.' : 'La puedes revisar y aprobar en «Detalles de la obra».'}` : 'Después de la visita te enviamos la cotización y queda en la app para que la apruebes.';
+  if (/cu[aá]nto|precio|cost|valor|cotiz/.test(t)) return c ? `Tu cotización está en ${money(qTotals(c).total)} con IVA. ${s.aprobada ? 'Ya la aprobaste, gracias.' : 'La puedes revisar y aprobar en «Detalles» de tu solicitud.'}` : 'Después de la visita te enviamos la cotización y queda en la app para que la apruebes.';
   if (/romper|da[ñn]ar|demoler/.test(t)) return 'En la mayoría de los casos no hay que romper: se impermeabiliza desde la terraza o la cubierta. El técnico lo confirma en la visita.';
   if (/garant/.test(t)) return `Sí, la impermeabilización tiene garantía de ${D.settings.garantia} años por escrito.`;
   const nt = t.replace(/\bbuen[oa]?s?\s+(d[ií]as?|tardes|noches)\b/g, ' ');
@@ -1157,6 +1161,8 @@ function reply(t) {
 async function userSay(text) {
   const key = L.clientKey, s = curSvc();
   const ok = await sendMsg(key, 'u', text, s && s.num); if (!ok) return;
+  if (pendingAjuste && s && s._id === pendingAjuste && !s.ajuste) svcUpdate(s._id, { ajuste: true });
+  pendingAjuste = null;
   if (!D.settings.autoReply) return;
   botTyping = true; renderMsgs();
   setTimeout(async () => { await sendMsg(key, 'b', reply(text), s && s.num); botTyping = false; renderMsgs(); }, 1400);
@@ -1166,8 +1172,8 @@ async function userSay(text) {
 function confirmSheet(s) {
   const el = document.createElement('div'); el.className = 'sheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Solicitud enviada');
   el.innerHTML = `<div class="card"><div class="okmark"></div><h2 style="text-align:center;margin:0;font-size:22px">Solicitud enviada</h2>
-    <p class="small" style="text-align:center;font-size:13.5px;margin:6px 0 0">Te confirmaremos la cita por WhatsApp al ${esc(s.cliente.celular)}.</p>
-    <div class="sum"><b>Servicio #${s.num}</b><br>${esc(s.tipo)} · ${esc(s.inmueble)}<br>${s.modo === 'linea' ? 'Servicio agendado' : 'Visita técnica'}: ${esc(visitTxt(s))}${s.cotizacion ? `<br>Cotización estimada: ${money(qTotals(s.cotizacion).total)}` : ''}</div>
+    <p class="small" style="text-align:center;font-size:13.5px;margin:6px 0 0">Te confirmamos la visita en el chat de la app.</p>
+    <div class="sum"><b>Solicitud #${s.num}</b><br>${esc(s.tipo)} · ${esc(s.inmueble)}<br>Visita técnica: ${esc(visitTxt(s))}${s.cotizacion ? `<br>Cotización estimada: ${money(qTotals(s.cotizacion).total)}` : ''}</div>
     <button class="btn" id="seeSvc" style="width:100%">Ver mi servicio</button></div>`;
   $('#app').appendChild(el); requestAnimationFrame(() => el.classList.add('show'));
   // Back from "Mi servicio" goes home, never to the finished wizard.
@@ -1322,22 +1328,16 @@ const AV = {
     const byState = STATES.map((t, i) => [t, sv.filter(s => s.estado === i).length]);
     return `<div class="tiles">
         <button class="tile" data-a="fest" data-arg="all"><span>Solicitudes activas</span><b class="n">${act.length}</b></button>
-        <button class="tile" data-a="nav" data-arg="agenda"><span>Visitas próximos 7 días</span><b class="n">${visitas.length}</b></button>
         <button class="tile ${porAprobar.length ? 'warn' : ''}" data-a="fest" data-arg="cot"><span>Cotizaciones por aprobar</span><b class="n">${porAprobar.length}</b></button>
-        <button class="tile" data-a="fest" data-arg="ejec"><span>Obras en ejecución</span><b class="n">${ejec.length}</b></button>
-        <div class="tile"><span>Valor aprobado</span><b class="n money">${money(aprobado)}</b></div>
-        <div class="tile"><span>En cotizaciones sin aprobar</span><b class="n money">${money(pendiente)}</b></div>
         <button class="tile ${counts().unread ? 'alert' : ''}" data-a="nav" data-arg="mensajes"><span>Chats sin responder</span><b class="n">${counts().unread}</b></button>
-        <button class="tile" data-a="nav" data-arg="clientes"><span>Clientes registrados</span><b class="n">${Object.keys(D.clients).length}</b></button>
+        <div class="tile"><span>Valor aprobado</span><b class="n money">${money(aprobado)}</b></div>
       </div>
       <div class="cols"><div class="col">
         <div class="ac"><h3 class="ah">Requieren atención</h3>${att.length ? `<div class="alist">${att.slice(0, 8).map(x => x.s
           ? `<button class="arow" data-a="open" data-arg="${x.s._id}"><span class="num">#${x.s.num}</span><span class="grow"><b>${esc(x.t)}</b><span class="small">${esc(cliOf(x.s).nombre)} · ${esc(STATES[x.s.estado])}</span></span>${ICON.chev}</button>`
           : `<button class="arow" data-a="thread" data-arg="${esc(x.chat)}"><span class="dotu"></span><span class="grow"><b>${esc(x.t)}</b><span class="small">${ago((D.chats[x.chat].lastClientAt) || 0)}</span></span>${ICON.chev}</button>`).join('')}</div>${att.length > 8 ? `<p class="small" style="margin:10px 0 0">Y ${att.length - 8} más en Solicitudes y Mensajes.</p>` : ''}` : '<p class="small" style="margin:0">Todo al día. No hay pendientes.</p>'}</div>
       </div><div class="col">
-        <div class="ac"><h3 class="ah">Próximas visitas</h3>${visitas.length ? `<div class="alist">${visitas.slice(0, 6).map(s => `<button class="arow" data-a="open" data-arg="${s._id}"><span class="num">#${s.num}</span><span class="grow"><b>${esc(fechaTxt(s.fecha))} · ${franjaLbl(s.franja)}</b><span class="small">${esc(s.direccion)} · ${esc(techName(s.tecnico) || 'Sin técnico')}</span></span>${ICON.chev}</button>`).join('')}</div>` : '<p class="small" style="margin:0">No hay visitas en los próximos 7 días.</p>'}</div>
-        <div class="ac"><h3 class="ah">Solicitudes por estado</h3><div class="chips">${byState.map(([t, n], i) => `<span class="pill ${n ? 'b' : 'n'}">${i + 1}. ${t}: ${n}</span>`).join('')}</div></div>
-      </div></div>`; } },
+        <div class="ac"><h3 class="ah">Próximas visitas</h3>${visitas.length ? `<div class="alist">${visitas.slice(0, 6).map(s => `<button class="arow" data-a="open" data-arg="${s._id}"><span class="num">#${s.num}</span><span class="grow"><b>${esc(fechaTxt(s.fecha))} · ${franjaLbl(s.franja)}</b><span class="small">${esc(s.direccion)} · ${esc(techName(s.tecnico) || 'Sin técnico')}</span></span>${ICON.chev}</button>`).join('')}</div>` : '<p class="small" style="margin:0">No hay visitas en los próximos 7 días.</p>'}</div>      </div></div>`; } },
 
   solicitudes: { title: () => 'Solicitudes', html: () => {
     if (!D.services.length) return emptyAdmin();
@@ -1345,7 +1345,8 @@ const AV = {
     const FIL = [['all', 'Todas'], ['visita', 'Por visitar'], ['cot', 'Cotización'], ['ejec', 'En ejecución'], ['fin', 'Finalizadas'], ['alerta', 'Con alertas']];
     return `<div class="toolbar"><div class="two"><input class="inp s" id="fq" type="search" data-m="fq" placeholder="Buscar por #, cliente, dirección…" value="${esc(F.q)}" aria-label="Buscar solicitudes">
         <select class="inp s" id="ft" data-m="ft" aria-label="Tipo de problema"><option value="">Todos los tipos</option>${TYPES.map(t => `<option ${F.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
-        <div class="chips">${FIL.map(([k, t]) => `<button class="chip" data-a="fest" data-arg="${k}" aria-pressed="${F.estado === k}">${t}</button>`).join('')}</div></div>
+        <div class="chips">${FIL.map(([k, t]) => `<button class="chip" data-a="fest" data-arg="${k}" aria-pressed="${F.estado === k}">${t}</button>`).join('')}</div>
+        <p class="small" style="margin:0">Alerta: le falta técnico o fecha, o el cliente pidió ajustar la cotización.</p></div>
       <div class="alist" id="slist">${svcListHtml()}</div>`; } },
 
   solicitud: { title: () => { const s = svcById(A.sel); return s ? `Solicitud #${s.num}` : 'Solicitud'; }, thread: () => { const s = svcById(A.sel); return s ? s.clientKey : null; },
@@ -1360,8 +1361,9 @@ const AV = {
       return `<div class="ac">
         <div class="ahead"><div style="min-width:0"><span class="small">Creada ${esc(fmtTs(s.creado))} · ${s.modo === 'linea' ? 'Cotización en línea' : 'Visita técnica'}</span><h2 class="ad-h2">${esc(s.tipo)} · ${esc(s.inmueble)}${s.area ? ' · ' + esc(s.area) + ' m²' : ''}</h2>
           <div class="flags"><span class="pill u${o.u}">Urgencia ${URG[o.u].toLowerCase()}</span>${al.map(x => `<span class="pill u3">${x}</span>`).join('')}${unreadAdmin(s.clientKey) ? '<span class="pill u3">Mensaje nuevo</span>' : ''}${s.demo ? '<span class="pill n">Ejemplo</span>' : ''}</div></div>${badgeOf(s)}</div>
-        <div class="stepper" role="group" aria-label="Estado">${STATES.map((t, i) => `<button class="stp ${i < s.estado ? 'done' : i === s.estado ? 'now' : ''}" data-a="step" data-arg="${i}" aria-pressed="${i === s.estado}" title="Cambiar a ${t}"><i></i><span>${t}</span></button>`).join('')}</div>
-        <div class="btnrow">${s.estado < 4 ? `<button class="btn sm" data-a="step" data-arg="${s.estado + 1}">Pasar a «${nextLbl}»</button>` : ''}${s.estado > 0 ? `<button class="btn sec sm" data-a="step" data-arg="${s.estado - 1}">Volver a «${STATES[s.estado - 1]}»</button>` : ''}</div>
+        <div class="stepper" role="img" aria-label="Estado: ${STATES[s.estado]}">${STATES.map((t, i) => `<span class="stp ${i < s.estado ? 'done' : i === s.estado ? 'now' : ''}"><i></i><span>${t}</span></span>`).join('')}</div>
+        <div class="btnrow">${s.estado < 4 ? `<button class="btn sm" data-a="step" data-arg="${s.estado + 1}"${s.estado === 2 && !s.aprobada ? ' data-confirm="El cliente no ha aprobado. Toca otra vez para marcarla aprobada"' : ''}>Pasar a «${nextLbl}»</button>` : ''}</div>
+        ${s.estado > 0 ? `<button class="link" data-a="step" data-arg="${s.estado - 1}" style="padding-left:0">Deshacer: volver a «${STATES[s.estado - 1]}»</button>` : ''}
         ${s.estado === 1 && !c ? '<p class="small" style="margin:10px 0 0">Para pasar a «Cotización enviada» primero envía la cotización (más abajo).</p>' : ''}
       </div>
       <div class="cols"><div class="col">
@@ -1370,7 +1372,7 @@ const AV = {
           <dt>Celular</dt><dd>${esc(cl.celular)}<button class="copy" data-a="copy" data-arg="${esc(cl.celular)}">Copiar</button></dd>
           ${cl.correo ? `<dt>Correo</dt><dd>${esc(cl.correo)}</dd>` : ''}
           <dt>Dirección</dt><dd>${esc(s.direccion)}</dd></dl>
-          <div class="btnrow"><a class="btn wa sm" href="${waLink(cl.celular, `Hola ${first(cl.nombre)}, te escribe el equipo de ImpermeApp por tu servicio #${s.num}.`)}" target="_blank" rel="noopener">WhatsApp ↗</a><button class="btn sec sm" data-a="client" data-arg="${esc(s.clientKey)}">Ver ficha del cliente</button></div></div>
+          <div class="btnrow"><a class="btn wa sm" href="${waLink(cl.celular, `Hola ${first(cl.nombre)}, te escribe el equipo de ImpermeApp por tu solicitud #${s.num}.`)}" target="_blank" rel="noopener">WhatsApp ↗</a><button class="btn sec sm" data-a="client" data-arg="${esc(s.clientKey)}">Ver ficha del cliente</button></div></div>
         <div class="ac"><h3 class="ah">Problema reportado</h3>
           <p style="margin:0 0 4px;font-size:14.5px;line-height:1.5">${s.desc ? esc(s.desc) : '<span class="small">Sin descripción.</span>'}</p>
           <p class="small" style="margin:0">Orientación automática: ${esc(o.c)}</p>
@@ -1467,9 +1469,9 @@ const AV = {
         <span class="fl">Días laborales</span><div class="chips">${[1, 2, 3, 4, 5, 6, 0].map(d => `<button type="button" class="chip" data-a="dayw" data-arg="${d}" aria-pressed="${c.dias.includes(d)}">${DIAS[d]}</button>`).join('')}</div>
         <h3 class="ah" style="margin-top:22px">Atención y acceso</h3>
         <label class="toggle"><input type="checkbox" id="cAuto" data-m="auto" ${c.autoReply ? 'checked' : ''}>Respuestas automáticas en el chat mientras el equipo responde</label>
-        <p class="small" style="margin:10px 0 0">Los celulares del equipo se definen en el código (ADMIN_PHONES) y en las reglas de seguridad de Firestore.</p>
+        <p class="small" style="margin:10px 0 0">Los celulares que pueden entrar a este panel los define el administrador del proyecto.</p>
         <div class="btnrow"><button class="btn sm">Guardar configuración</button></div></form>
-      <div class="ac"><h3 class="ah">Datos de la demo</h3><p class="small" style="margin:0 0 4px">${Store && Store.mode !== 'local' ? 'Modo en vivo: los datos se guardan en Firebase y se ven al instante en todos los dispositivos.' : 'Modo local: los datos se guardan solo en este navegador.'}</p>
+      <div class="ac"><h3 class="ah">Datos de la demo</h3><p class="small" style="margin:0 0 4px">${Store && Store.mode !== 'local' ? 'Modo en vivo: los cambios se ven al instante en todos los dispositivos. Usa estos botones solo para preparar la demostración.' : 'Modo local: los datos se guardan solo en este navegador.'}</p>
         <div class="btnrow"><button class="btn sec sm" data-a="seed">Cargar datos de ejemplo</button><button class="btn danger sm" data-a="wipe" data-confirm="Toca otra vez para borrar todo">Borrar solicitudes, clientes y chats</button></div></div>`; } },
 
   mas: { title: () => 'Más', html: () => `<div class="alist">${[['clientes', 'Clientes', 'users'], ['tecnicos', 'Técnicos', 'tool'], ['config', 'Configuración', 'gear']].map(([v, t, i]) => `<button class="arow" data-a="nav" data-arg="${v}">${ICON[i]}<span class="grow"><b>${t}</b></span>${ICON.chev}</button>`).join('')}
@@ -1572,7 +1574,7 @@ const ACT = {
     if (!(await svcUpdate(s._id, patch))) return;
     if ((i === 4) !== (s.estado === 4)) syncOcup(s, { activo: i < 4 });
     toast(`#${s.num} ahora está en «${STATES[i]}». El cliente ya lo ve.`);
-    if (i === 4) sendMsg(s.clientKey, 'a', `¡Terminamos la obra del servicio #${s.num}! Tienes garantía de ${D.settings.garantia} años. Gracias por confiar en ImpermeApp.`, s.num);
+    if (i === 4) sendMsg(s.clientKey, 'a', `¡Terminamos la obra de la solicitud #${s.num}! Tienes garantía de ${D.settings.garantia} años. Gracias por confiar en ImpermeApp.`, s.num);
   },
   savevisit: async () => {
     const s = svcById(A.sel), v = A.vd; if (!s) return;
@@ -1582,7 +1584,7 @@ const ACT = {
     if (!Object.keys(patch).length) return toast('No hay cambios para guardar.');
     if (!(await svcUpdate(s._id, patch))) return;
     if (patch.fecha) syncOcup(s, { fecha: patch.fecha, franja: patch.franja });
-    if (msgs.length) await sendMsg(s.clientKey, 'a', `Hola ${first(cliOf(s).nombre)}, actualizamos tu servicio #${s.num}. ${msgs.join(' ')}`, s.num);
+    if (msgs.length) await sendMsg(s.clientKey, 'a', `Hola ${first(cliOf(s).nombre)}, actualizamos tu solicitud #${s.num}. ${msgs.join(' ')}`, s.num);
     toast('Guardado. Le avisamos al cliente por el chat.');
   },
   qadd: () => { A.qd.items.push({ desc: '', cant: 1, unidad: 'und', valor: 0 }); $('#qEditor').innerHTML = quoteEditor(); },
@@ -1597,7 +1599,7 @@ const ACT = {
     if (s.estado === 4) return toast('La obra ya está finalizada; no se puede cambiar la cotización.');
     if (!(await svcUpdate(s._id, patch))) return;
     A.qd = Object.assign(clone(cot), { for: s._id });
-    await sendMsg(s.clientKey, 'a', `Te enviamos la cotización${cot.version > 1 ? ' actualizada' : ''} del servicio #${s.num} por ${money(qTotals(cot).total)}. Puedes revisarla y aprobarla en la app.`, s.num);
+    await sendMsg(s.clientKey, 'a', `Te enviamos la cotización${cot.version > 1 ? ' actualizada' : ''} de la solicitud #${s.num} por ${money(qTotals(cot).total)}. Puedes revisarla y aprobarla en la app.`, s.num);
     toast('Cotización enviada. El cliente ya la puede aprobar.');
   },
   savenotes: async () => { const s = svcById(A.sel); if (!s) return; if ((s.notas || '') === A.nd) return toast('Las notas no tienen cambios.'); if (await svcUpdate(s._id, { notas: A.nd })) toast('Notas guardadas.'); },
@@ -1762,10 +1764,10 @@ function detectChanges() {
         if (!p.aprobada && s.aprobada) toast(`${cliOf(s).nombre} aprobó la cotización #${s.num}.`);
         if (!p.ajuste && s.ajuste) toast(`${cliOf(s).nombre} pidió ajustar la cotización #${s.num}.`);
       } else if (p && s.clientKey === L.clientKey && !mine) {
-        if (p.estado !== s.estado) banner(`Tu servicio #${s.num} ahora está en: ${STATES[s.estado]}`);
-        else if ((p.cotizacion || {}).enviada !== (s.cotizacion || {}).enviada && s.cotizacion) banner(`Recibiste la cotización del servicio #${s.num}`);
-        else if (p.tecnico !== s.tecnico && s.tecnico) banner(`${techName(s.tecnico)} será tu técnico en el servicio #${s.num}`);
-        else if (p.fecha !== s.fecha || p.franja !== s.franja) banner(`Tu cita del servicio #${s.num} cambió: ${visitTxt(s)}`);
+        if (p.estado !== s.estado) banner(`Tu solicitud #${s.num} ahora está en: ${STATES[s.estado]}`);
+        else if ((p.cotizacion || {}).enviada !== (s.cotizacion || {}).enviada && s.cotizacion) banner(`Recibiste la cotización de la solicitud #${s.num}`);
+        else if (p.tecnico !== s.tecnico && s.tecnico) banner(`${techName(s.tecnico)} será tu técnico en la solicitud #${s.num}`);
+        else if (p.fecha !== s.fecha || p.franja !== s.franja) banner(`Tu visita de la solicitud #${s.num} cambió: ${visitTxt(s)}`);
       }
     }
   }
