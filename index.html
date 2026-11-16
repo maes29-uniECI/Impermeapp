@@ -770,7 +770,7 @@ const SCREENS = {
     <div class="body">
       <div class="hero"><div class="dropfall">${DROP(64, 84)}</div><h2>${u ? 'Hola, ' + esc(first(u.nombre)) : 'ImpermeApp'}</h2><p>Reporta humedades y filtraciones, cotiza y sigue tu servicio en vivo.</p></div>
       ${s ? `<button class="active" data-svc="${s._id}"><span class="grow"><span class="small">Servicio #${s.num} · ${esc(STATES[s.estado])}</span><b>${esc(s.tipo)}</b><span class="small">${esc(visitTxt(s))}</span></span>${ICON.chev}</button>`
-        : `<ol class="howto"><li><b>1</b>Sube fotos y recibe orientación</li><li><b>2</b>Recibe tu cotización</li><li><b>3</b>Agenda la visita técnica</li></ol>`}
+        : `<ol class="howto"><li><b>1</b>Sube fotos y recibe orientación</li><li><b>2</b>Agenda la visita técnica</li><li><b>3</b>Recibe y aprueba tu cotización</li></ol>`}
       ${unread ? `<button class="msgnote" data-go="chat"><i></i><span>Tienes un mensaje nuevo del equipo</span></button>` : ''}
     </div>
     <div class="foot"><button class="btn" id="goReport">Reportar un problema</button><button class="btn sec" data-go="servicios">Ver mis servicios</button>
